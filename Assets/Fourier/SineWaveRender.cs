@@ -1,53 +1,88 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using Complex = System.Numerics.Complex;
 
 public class SineWaveRender : MonoBehaviour {
 
-    GameObject[] points;
-    [SerializeField] int pointCount = 2000;
+    [SerializeField] Transform cameraStand;
+    GameObject[] valuePoints;
+    [SerializeField] int pointCount = 1000;
+
+    [SerializeField] float amplitude = 10;
+    [SerializeField] float frequency = 10;
+    [SerializeField] int type = 0;
+    float curFrequency = 0;
+    float curAmplitude = 0;
+    int curType = 0;
 
     void Start() {
-        points = new GameObject[pointCount];
+
+        Application.targetFrameRate = 60;
+
+        valuePoints = new GameObject[pointCount];
         for (int i = 0; i < pointCount; i++) {
-            points[i] = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            points[i].transform.localScale = new Vector3(0.1f, 0.1f, 0.1f);
+            valuePoints[i] = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            valuePoints[i].transform.localScale = new Vector3(0.1f, 0.1f, 0.1f);
         }
+
     }
 
     void Update() {
-        float amplitude = 10f;
-        float frequency = 1f;
-        float phase = 0f;
-        Vector3 offset = new Vector3(-10, 0, 0);
+
+        if (Input.GetMouseButton(1)) {
+            float mouseMove = Input.GetAxis("Mouse X");
+            cameraStand.Rotate(0, mouseMove, 0);
+        }
+
+        if (curAmplitude != amplitude || curFrequency != frequency || curType != type) {
+            curAmplitude = amplitude;
+            curFrequency = frequency;
+            curType = type;
+
+            Vector3 offset = new Vector3(-10, 0, 0);
+
+            // 生产一段正弦波的采样点
+            float[] values = Bake_Values();
+
+            // 时域转频域
+            Complex[] spectrum = FourierHelper.DFT(values);
+
+            // 频域转时域
+            float[] values2 = FourierHelper.DFT_Inverse_Real(spectrum);
+
+            if (type == 0) {
+                // 原始时域
+                for (int i = 0; i < pointCount; i++) {
+                    valuePoints[i].transform.position = new Vector3(i / 60f, values[i], 0) + offset;
+                }
+            } else if (type == 1) {
+                // 时域转频域
+                for (int i = 0; i < pointCount; i++) {
+                    var wave = spectrum[i];
+                    float amplitude = (float)wave.Magnitude;
+                    valuePoints[i].transform.position = new Vector3(i / 60f, amplitude, 0) + offset;
+                }
+            } else if (type == 2) {
+                // 频域转时域
+                for (int i = 0; i < pointCount; i++) {
+                    valuePoints[i].transform.position = new Vector3(i / 60f, values2[i], 0) + offset;
+                }
+            }
+
+        }
+
+    }
+
+    float[] Bake_Values() {
+        var values = new float[pointCount];
         for (int i = 0; i < pointCount; i++) {
-            var point = points[i];
-            float x = i / 100f;
-            float y = 叠加出锯齿波(x, amplitude, frequency, phase);
-            Vector3 pos = new Vector3(x, y, 0) + offset;
-            point.transform.position = pos;
+            float t = i / 60f;
+            float y = FourierHelper.Y_ByRealWave(t, amplitude, frequency, 0);
+            // float y = amplitude * Mathf.Sin(frequency * t);
+            values[i] = y;
         }
-    }
-
-    float 叠加出方波(float x, float amplitude, float frequency, float phase) {
-        float y = 0;
-        for (int j = 0; j < 1000; j++) {
-            y += SineWave(x, amplitude / ((1 + 2 * j) * Mathf.PI), (1 + 2 * j) * frequency, phase);
-        }
-        return y;
-    }
-
-    float 叠加出锯齿波(float x, float amplitude, float frequency, float phase) {
-        float y = 0;
-        for (int j = 0; j < 1000; j++) {
-            int sign = j % 2 == 0 ? 1 : -1;
-            y += SineWave(x, sign * amplitude / ((j + 1) * Mathf.PI), (j + 1) * frequency, phase);
-        }
-        return y;
-    }        
-
-    float SineWave(float x, float amplitude, float frequency, float phase) {
-        return amplitude * Mathf.Sin(2 * Mathf.PI * frequency * x + phase);
+        return values;
     }
 
 }
